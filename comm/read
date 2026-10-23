@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# comm/read — read the neighbour pane's screen.
+# usage: ./comm/read [scrollback_lines]   (default 250)
+set -euo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$DIR/_target"
+
+target="$(resolve_target)"
+tmux capture-pane -p -t "$target" -S -"${1:-250}"

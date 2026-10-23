@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# comm/say — send a single-line message to the neighbour tmux pane.
+# usage: ./comm/say "message"
+# env:   COMM_TARGET=8:0.1   (auto-detected neighbour if unset)
+set -euo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$DIR/_target"
+
+[ $# -ge 1 ] || { echo "usage: $0 <message>" >&2; exit 2; }
+
+msg="$*"
+target="$(resolve_target)"
+[ -n "$target" ] || { echo "no neighbour pane found" >&2; exit 1; }
+
+printf '[%s] %s -> %s: %s\n' "$(date '+%H:%M:%S')" "$(me_label)" "$target" "$msg" >> "$DIR/chat.log"
+
+tmux send-keys -t "$target" -l "$msg"
+tmux send-keys -t "$target" Enter
+echo "sent to $target"
