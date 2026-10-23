@@ -27,7 +27,10 @@
 #define ESPNOW_CHANNEL    1
 #define LED_PIN           2        // onboard LED = GPIO2, ACTIVE LOW
 #define REPORT_WINDOW_MS  60000    // 60 s summary window
-#define WIFI_TX_POWER     WIFI_OUTPUT_POWER
+
+// ESP8266 core exposes WiFi.setOutputPower(float dBm) only, clamped 0..20.5.
+// There is no WIFI_OUTPUT_POWER constant in this core — that is ESP32 lore.
+#define TX_POWER_DBM      20.5f
 
 // ---------------------------------------------------------------------------
 // Wire format — keep identical in anil_node_a.ino and anil_node_b.ino
@@ -49,6 +52,10 @@ struct __attribute__((packed)) anil_packet_t {
 static_assert(sizeof(anil_packet_t) == 12,
               "anil_packet_t must be exactly 12 bytes — both nodes must agree");
 
+// Broadcast peer address, file scope so we pass an explicit pointer rather
+// than relying on esp_now_send(NULL, ...) semantics hidden inside libespnow.a.
+static u8 sBcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -57,12 +64,13 @@ static volatile uint32_t sBadPacket = 0;   // wrong magic/version/length
 static volatile uint32_t sAckSent   = 0;   // ACK frames handed to ESP-NOW
 static volatile uint32_t sSendFail  = 0;   // esp_now_send refused
 static volatile uint32_t sGaps      = 0;   // missing seq numbers seen
+static volatile uint32_t sWinRx     = 0;   // DATA accepted in this window
 static volatile uint32_t sLastSeq   = 0;
 static volatile bool     sReplyNow  = false;
 static volatile uint32_t sReplySeq  = 0;
 
 static uint32_t sWindowStartMs = 0;
-static uint32_t sWindowRx      = 0;
+static bool     sReady         = false;  // false = setup failed, stay quiet
 static bool     sLedOn         = false;
 
 // ---------------------------------------------------------------------------
@@ -101,11 +109,12 @@ static void onDataRecv(u8 *mac, u8 *data, u8 len) {
   }
   sLastSeq = pkt.seq;
   sRxCount++;
-  sWindowRx++;
+  sWinRx++;
   ledToggle();
 
-  // Hand the reply to loop(): esp_now_send from inside the receive callback
-  // re-enters the WiFi task on some SDK builds, so it is queued instead.
+  // Hand the reply to loop(): the core's own ESP8266WiFiMesh library asserts
+  // that calling transmit from inside a receive callback can corrupt program
+  // state, so sending is deferred rather than done here.
   sReplySeq = pkt.seq;
   sReplyNow = true;
 }
@@ -123,8 +132,7 @@ static void sendAck(uint32_t seq) {
   pkt.uptimeMs = millis();
 
   // esp_now_send takes a non-const u8*, hence the cast.
-  // NULL = every registered peer (we registered the broadcast address).
-  if (esp_now_send(NULL, (u8 *)&pkt, sizeof(pkt)) == 0) {
+  if (esp_now_send(sBcast, (u8 *)&pkt, sizeof(pkt)) == 0) {
     sAckSent++;
   } else {
     sSendFail++;
@@ -135,17 +143,19 @@ static void sendAck(uint32_t seq) {
 // Reporting
 // ---------------------------------------------------------------------------
 static void report() {
-  Serial.printf("[B] t=%lus ch=%u RX=%lu lastSeq=%lu gaps=%lu bad=%lu fail=%lu\n",
+  uint32_t rx = sWinRx;
+  sWinRx = 0;
+  sWindowStartMs = millis();
+
+  Serial.printf("[B] t=%lus ch=%u RX=%lu tot=%lu lastSeq=%lu gaps=%lu bad=%lu fail=%lu\n",
                 millis() / 1000UL,
                 (unsigned)wifi_get_channel(),
+                (unsigned long)rx,
                 (unsigned long)sRxCount,
                 (unsigned long)sLastSeq,
                 (unsigned long)sGaps,
                 (unsigned long)sBadPacket,
                 (unsigned long)sSendFail);
-
-  sWindowStartMs = millis();
-  sWindowRx      = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -166,12 +176,13 @@ void setup() {
   WiFi.disconnect();          // BARE on purpose: disconnect(true) turns the
                               // radio off and ESP-NOW dies silently.
   wifi_set_channel(ESPNOW_CHANNEL);
-  WiFi.setOutputPower(WIFI_TX_POWER);
+  WiFi.setOutputPower(TX_POWER_DBM);
 
   Serial.printf("channel=%u (expected %u)\n",
                 (unsigned)wifi_get_channel(), (unsigned)ESPNOW_CHANNEL);
   if (wifi_get_channel() != ESPNOW_CHANNEL) {
     Serial.println("FATAL: channel did not stick — ESP-NOW will not link");
+    return;
   }
 
   if (esp_now_init() != 0) {
@@ -183,17 +194,22 @@ void setup() {
   esp_now_register_send_cb(onDataSent);
   esp_now_register_recv_cb(onDataRecv);
 
-  u8 bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-  int err = esp_now_add_peer(bcast, ESP_NOW_ROLE_COMBO, ESPNOW_CHANNEL, NULL, 0);
+  int err = esp_now_add_peer(sBcast, ESP_NOW_ROLE_COMBO, ESPNOW_CHANNEL, NULL, 0);
   Serial.printf("add_peer(broadcast)=%d\n", err);
-  if (err != 0) Serial.println("FATAL: esp_now_add_peer failed");
+  if (err != 0) {
+    Serial.println("FATAL: esp_now_add_peer failed");
+    return;
+  }
 
   Serial.printf("MAC=%s\n", WiFi.macAddress().c_str());
 
   sWindowStartMs = millis();
+  sReady         = true;
 }
 
 void loop() {
+  if (!sReady) { delay(1000); return; }   // setup failed: do not print lies
+
   if (sReplyNow) {
     sReplyNow = false;
     sendAck(sReplySeq);
@@ -203,5 +219,5 @@ void loop() {
     report();
   }
 
-  delay(10);   // keeps the WiFi stack fed
+  delay(10);   // yields to the WiFi stack, which is what lets callbacks run
 }

@@ -62,7 +62,8 @@ No CLI toolchain is used — build and upload from the Arduino IDE.
    https://arduino.esp8266.com/stable/package_esp8266com_index.json
    ```
    Then *Tools → Board → Boards Manager* → install **esp8266** by ESP8266
-   Community. Tested against **3.1.2**.
+   Community. Targets **3.1.2** (not yet compiled or flashed against it —
+   say so if you find a difference).
 
 2. **Select the board.** *Tools → Board → ESP8266 → NodeMCU 1.0 (ESP-12E
    Module)* — or *LOLIN(WEMOS) D1 R2 & mini* if that is what you have. The
@@ -84,13 +85,19 @@ Run for **60 seconds** with both boards powered.
 
 | Node | Expected |
 |---|---|
-| A | `[A] t=60s ch=1 TX=60 ACK=60 loss=0% RTT=<N>ms bad=0 fail=0` |
-| B | `[B] t=60s ch=1 RX=60 lastSeq=59 gaps=0 bad=0 fail=0` |
+| A | `[A] t=60s ch=1 TX=60 ACK=60 loss=0% RTT=<N>ms bad=0 fail=0 dup=0` |
+| B | `[B] t=60s ch=1 RX=60 tot=60 lastSeq=59 gaps=0 bad=0 fail=0` |
 | Both | onboard LED toggles once per packet |
 
 **Pass:** `loss=0%`, `gaps=0`, `bad=0`, `fail=0`, and both LEDs visibly
 toggling. Loss under a few percent with boards in the same room still counts
 as a working link but is worth investigating.
+
+A's `TX` is exactly 60 by construction (the report runs before the send, so
+window one holds precisely 60 frames). B's `RX` can read **60 or 61**
+depending on how far apart the two boards were powered up — a window is
+anchored to each board's own boot, not to a shared clock. `tot` is the
+cumulative count and does not reset.
 
 **Fail signals and what they mean:**
 
