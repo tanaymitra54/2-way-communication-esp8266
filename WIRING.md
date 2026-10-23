@@ -87,13 +87,13 @@ The `RTT` figure is not a range or signal measurement — see below.
 Node A, first report at t = 60 s:
 
 ```
-[A] t=60s ch=1 TX=60 ACK=60 loss=0% RTT=5ms bad=0 fail=0 dup=0
+[A] t=60s ch=1 TX=60 ACK=60 tot=60 loss=0% RTT=5ms bad=0 fail=0 dup=0
 ```
 
 Node B, same moment:
 
 ```
-[B] t=60s ch=1 RX=60 tot=60 lastSeq=59 gaps=0 bad=0 fail=0
+[B] t=60s ch=1 RX=60 tot=60 ack=60 lastSeq=59 gaps=0 bad=0 fail=0
 ```
 
 Reading the fields:
@@ -102,6 +102,7 @@ Reading the fields:
 |---|---|---|---|
 | `TX` | A | DATA frames handed to ESP-NOW this window | per window |
 | `ACK` | A | ACKs that closed a pending request this window | per window |
+| `tot` | A | DATA frames sent since boot | cumulative |
 | `loss` | A | `(TX - ACK) / TX` for the window | per window |
 | `RTT` | A | mean send→ACK time this window | per window |
 | `bad` | A/B | frames rejected (length, magic, version) | cumulative |
@@ -109,6 +110,7 @@ Reading the fields:
 | `dup` | A | ACKs not matching the pending seq | cumulative |
 | `RX` | B | DATA packets accepted this window | per window |
 | `tot` | B | DATA packets accepted since boot | cumulative |
+| `ack` | B | ACK frames handed to ESP-NOW since boot | cumulative |
 | `lastSeq` | B | last DATA seq accepted | cumulative |
 | `gaps` | B | missing sequence numbers observed | cumulative |
 

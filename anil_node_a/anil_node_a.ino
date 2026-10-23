@@ -72,10 +72,10 @@ static volatile uint32_t sWinRttSum  = 0;
 static volatile uint32_t sWinRttCnt  = 0;
 
 static uint32_t sSeq        = 0;
-static uint32_t sNextSendMs = 0;
-static uint32_t sPendingSeq = 0;
-static uint32_t sPendingMs  = 0;
-static bool     sPending    = false;
+static volatile uint32_t sNextSendMs = 0;
+static volatile uint32_t sPendingSeq = 0;
+static volatile uint32_t sPendingMs  = 0;
+static volatile bool     sPending    = false;
 
 static uint32_t sWindowStartMs = 0;
 static bool     sReady         = false;  // false = setup failed, stay quiet
@@ -158,7 +158,11 @@ static void sendData() {
 // Reporting
 // ---------------------------------------------------------------------------
 static void report() {
-  // Snapshot then reset, so a callback mid-report cannot skew the numbers.
+  // Snapshot then reset. A callback landing between the snapshot and the reset
+  // is counted by the callback and then zeroed here, so at worst one packet is
+  // dropped from the tally — never double-counted. At 1 Hz that is vanishingly
+  // unlikely, and dropping is the safe direction: it can only understate ACKs,
+  // never inflate them.
   uint32_t tx  = sWinTx;
   uint32_t ack = sWinAck;
   uint32_t rtt = sWinRttCnt ? (sWinRttSum / sWinRttCnt) : 0;
@@ -172,11 +176,12 @@ static void report() {
   uint32_t loss = 0;
   if (tx > 0 && ack < tx) loss = 100UL * (tx - ack) / tx;   // guard the underflow
 
-  Serial.printf("[A] t=%lus ch=%u TX=%lu ACK=%lu loss=%lu%% RTT=%lums bad=%lu fail=%lu dup=%lu\n",
+  Serial.printf("[A] t=%lus ch=%u TX=%lu ACK=%lu tot=%lu loss=%lu%% RTT=%lums bad=%lu fail=%lu dup=%lu\n",
                 millis() / 1000UL,
                 (unsigned)wifi_get_channel(),
                 (unsigned long)tx,
                 (unsigned long)ack,
+                (unsigned long)sTxCount,
                 (unsigned long)loss,
                 (unsigned long)rtt,
                 (unsigned long)sBadPacket,
@@ -252,5 +257,8 @@ void loop() {
     sendData();
   }
 
-  delay(10);   // yields to the WiFi stack, which is what lets callbacks run
+  // Yield to the WiFi stack so receive callbacks can run. Note this period is
+  // also the responder's ACK latency floor on node B, so A's RTT includes up
+  // to one loop period of scheduling delay on top of true air time.
+  delay(10);
 }

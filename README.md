@@ -85,8 +85,8 @@ Run for **60 seconds** with both boards powered.
 
 | Node | Expected |
 |---|---|
-| A | `[A] t=60s ch=1 TX=60 ACK=60 loss=0% RTT=<N>ms bad=0 fail=0 dup=0` |
-| B | `[B] t=60s ch=1 RX=60 tot=60 lastSeq=59 gaps=0 bad=0 fail=0` |
+| A | `[A] t=60s ch=1 TX=60 ACK=60 tot=60 loss=0% RTT=<N>ms bad=0 fail=0 dup=0` |
+| B | `[B] t=60s ch=1 RX=60 tot=60 ack=60 lastSeq=59 gaps=0 bad=0 fail=0` |
 | Both | onboard LED toggles once per packet |
 
 **Pass:** `loss=0%`, `gaps=0`, `bad=0`, `fail=0`, and both LEDs visibly

@@ -147,11 +147,12 @@ static void report() {
   sWinRx = 0;
   sWindowStartMs = millis();
 
-  Serial.printf("[B] t=%lus ch=%u RX=%lu tot=%lu lastSeq=%lu gaps=%lu bad=%lu fail=%lu\n",
+  Serial.printf("[B] t=%lus ch=%u RX=%lu tot=%lu ack=%lu lastSeq=%lu gaps=%lu bad=%lu fail=%lu\n",
                 millis() / 1000UL,
                 (unsigned)wifi_get_channel(),
                 (unsigned long)rx,
                 (unsigned long)sRxCount,
+                (unsigned long)sAckSent,
                 (unsigned long)sLastSeq,
                 (unsigned long)sGaps,
                 (unsigned long)sBadPacket,
@@ -219,5 +220,8 @@ void loop() {
     report();
   }
 
-  delay(10);   // yields to the WiFi stack, which is what lets callbacks run
+  // The deferred ACK is emitted at the top of the next iteration, so this
+  // delay is the responder's ACK latency floor: node A's measured RTT includes
+  // up to one loop period of it. Shrinking this tightens RTT but raises CPU use.
+  delay(10);
 }
