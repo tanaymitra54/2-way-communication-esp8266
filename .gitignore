@@ -5,3 +5,7 @@
 build/
 .vscode/
 .DS_Store
+
+# agent-to-agent channel + session notes (local only)
+comm/
+handoff.md

@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-# comm/log — show the shared transcript.
-set -euo pipefail
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cat "$DIR/chat.log" 2>/dev/null || echo "(no messages yet)"
