@@ -126,6 +126,14 @@ So RTT is a liveness and sanity indicator, not a signal-strength or range
 measurement. A steady RTT with `loss=0` means the link is healthy. It is not
 comparable between board pairs.
 
+To confirm where the latency comes from, change B's `delay(10)` to `delay(1)`
+and watch RTT: it should fall by roughly 4–5 ms. That separates scheduling
+delay from radio air time. It is a debug step, not a tuning step — v1 is a link
+proof, and a shorter loop period only costs CPU.
+
+Note that `ACK` on node A and `ack` on node B are not the same number: A's is
+matched ACKs **in the current window**, B's is ACKs **sent since boot**.
+
 ## LED behaviour
 
 | Board | Pattern |
